@@ -1,6 +1,6 @@
 # LLM Providers
 
-The modules in this folder implement the pluggable LLM provider architecture used by `ai-playwright`.
+The modules in this folder implement the pluggable LLM provider architecture used by `ai-act`.
 
 ## Built-in Providers
 

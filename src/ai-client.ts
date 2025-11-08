@@ -16,7 +16,7 @@ function isDebugEnvEnabled(): boolean {
 
 function debugLog(...messages: unknown[]): void {
   if (isDebugEnvEnabled()) {
-    console.log('[ai-playwright]', ...messages);
+    console.log('[ai-act]', ...messages);
   }
 }
 
