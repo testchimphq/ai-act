@@ -23,6 +23,7 @@ const SOM_ELEMENT_MAP_MAX_CHARS = 4000;
 const DEFAULT_SCREENSHOT_QUALITY = 60;
 const DEFAULT_CONFIDENCE_THRESHOLD = 70;
 const DEFAULT_WAIT_RETRY_LIMIT = 2;
+const DEFAULT_OBJECTIVE_ITERATION_LIMIT = 5;
 const DEFAULT_TEST_TIMEOUT_MS = 180000;
 function getDesiredTestTimeout() {
     const raw = process.env.AI_PLAYWRIGHT_TEST_TIMEOUT_MS?.trim();
@@ -93,6 +94,18 @@ function getMaxWaitRetries() {
     const parsed = Number(raw);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_WAIT_RETRY_LIMIT;
 }
+function getMaxObjectiveIterations() {
+    const raw = process.env.AI_PLAYWRIGHT_MAX_OBJECTIVE_ITERATIONS?.trim();
+    if (!raw) {
+        return DEFAULT_OBJECTIVE_ITERATION_LIMIT;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_OBJECTIVE_ITERATION_LIMIT;
+    }
+    const value = Math.floor(parsed);
+    return value > 0 ? value : DEFAULT_OBJECTIVE_ITERATION_LIMIT;
+}
 const ACT_PROMPT_HEADER = [
     '[SET-OF-MARKS MODE]',
     'Screenshot shows the entire page with colored bounding boxes and numeric labels.',
@@ -109,8 +122,11 @@ const ACT_PROTO_DEFINITION = [
     '  repeated SomCommand preCommands = 1;  // optional pre-actions to clear blockers',
     '  repeated SomCommand commandsToRun = 2; // main objective actions (only when ready)',
     '  optional bool needsRetryAfterPreActions = 3; // true when you expect to be re-invoked after preCommands',
-    '  optional bool shouldWait = 4; // request additional stabilization wait (no commands in the same response)',
+    '  optional bool shouldWait = 4;',
     '  optional string waitReason = 5;',
+    '  optional bool requiresFurtherAction = 6; // true when only partial progress was possible',
+    '  optional string completedObjectiveSummary = 7; // summary of what the returned commands achieve',
+    '  optional string nextObjective = 8; // remaining objective when requiresFurtherAction=true',
     '}',
     'message SomCommand {',
     '  string elementRef = 1;  // e.g. "1"',
@@ -139,6 +155,8 @@ function buildActRules(actions) {
         '- When blockers (modals, dialogs, consent banners) must be cleared, list those SomCommands in preCommands in the correct order.',
         '- Only populate commandsToRun when the main objective can be executed immediately.',
         '- If you expect another LLM call after preCommands, set needsRetryAfterPreActions = true and leave commandsToRun empty.',
+        '- If only part of the objective can be achieved now, return the commands for the completed portion, set requiresFurtherAction = true, provide completedObjectiveSummary, and specify nextObjective for the remaining work.',
+        '- Never hallucinate commands for screens you cannot currently see or interact with.',
         '- Do not include commandsToRun when needsRetryAfterPreActions = true or when shouldWait = true.',
         '- Do not include analysis, commentary, or verification commands outside the JSON structure.',
     ];

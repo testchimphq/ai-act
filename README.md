@@ -1,20 +1,21 @@
 # ai-playwright
 
-AI steps (ai.act, ai.verify) in your Playwright tests — open source, vision-enabled, no vendor lock-in.
+AI steps (`ai.act`, `ai.verify`) in your Playwright tests — open source, vision-enabled, with no vendor lock-in.
 
 ## Introduction
 
 `ai-playwright` lets you include AI-powered actions, verifications, and data extraction in any Playwright test. It supports:
-- BYOL (bring-your-own-license) to use your own OpenAI Api key, 
+- BYOL (bring-your-own-license) to use your own [OpenAI](./src/llm-providers/openai.md), [Google Gemini](./src/llm-providers/gemini.md), or [Anthropic Claude](./src/llm-providers/claude.md) API keys.
 - or use your [TestChimp](https://testchimp.io) license key to avoid paying separately for token usage. 
 
 Unlike other solutions, `ai-playwright` relies on *vision intelligence*: screenshots are annotated with Set-of-Marks (SoM) overlays and combined with DOM element maps for disambiguation, so the LLM can navigate complex UIs with far greater accuracy and resilience.
 
 **Why teams adopt `ai-playwright`:**
-- **Vendor flexibility & BYOL** – use your own OpenAI key or TestChimp license; you are never tied to a closed license.
+- **Vendor flexibility & BYOL** – use your own [OpenAI](./src/llm-providers/openai.md), [Gemini](./src/llm-providers/gemini.md), or [Claude](./src/llm-providers/claude.md) keys, or your [TestChimp](https://testchimp.io) license (to avoid separate token usage costs), or extend the pluggable interface to support a local model—no vendor lock-in.
 - **Vision-first semantics** – SoM overlays + DOM metadata give the model precise context.
-- **Resilient prompting** – pre-action planning, retry guidance, and stability waits are built in.
+- **Resilient prompting** – pre-action planning (eg: handling blockers like modals before addressing the actual requirement step), retry guidance, ability to handle coarse-grained steps with multi-step planning.
 - **Open source** – complete transparency and community support.
+- **Pluggable LLM providers** – extend to Gemini, Claude, or local models by implementing a provider (see [src/llm-providers/README.md](./src/llm-providers/README.md)).
 
 ## Usage Guide
 
@@ -81,6 +82,12 @@ const orderIds = await ai.extract('List the order IDs from the table', {
 2. **TestChimp API keys**
    - Set `TESTCHIMP_API_KEY` + `TESTCHIMP_PROJECT_ID`, _or_ `TESTCHIMP_USER_AUTH_KEY` + `TESTCHIMP_USER_MAIL`.
    - Benefit: reuse your existing TestChimp account, letting their backend proxy the LLM and cover token costs.
+3. **Google Gemini API key**
+   - Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`, defaults to `gemini-1.5-flash`).
+4. **Anthropic Claude API key**
+   - Set `CLAUDE_API_KEY` (and optionally `CLAUDE_MODEL`, defaults to `claude-3-sonnet-20240229`).
+
+The selection order is configurable in [`src/llm-providers/config.ts`](./src/llm-providers/config.ts). See the [LLM provider guide](./src/llm-providers/README.md) for instructions on adding new providers.
 
 ### Example Playwright Test
 
@@ -110,6 +117,11 @@ Environment variables:
 | `COMMAND_EXEC_TIMEOUT` | Timeout (ms) for individual DOM actions. | `5000` |
 | `NAVIGATION_COMMAND_TIMEOUT` | Timeout (ms) for navigation actions. | `15000` |
 | `OPENAI_MODEL` | Override the OpenAI model (ignored when using TestChimp). | `gpt-5-mini` |
+| `GEMINI_API_KEY` | Google Gemini API key used by the Gemini provider. | — |
+| `GEMINI_MODEL` | Override the Gemini model. | `gemini-1.5-flash` |
+| `CLAUDE_API_KEY` | Anthropic Claude API key used by the Claude provider. | — |
+| `CLAUDE_MODEL` | Override the Claude model. | `claude-3-sonnet-20240229` |
+| `CLAUDE_MAX_TOKENS` | Override the Claude response token limit. | `1024` |
 
 Optional context/options:
 - `context.logger`: `(message: string) => void` to receive internal log output.

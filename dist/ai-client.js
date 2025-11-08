@@ -1,16 +1,12 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.callAiAction = callAiAction;
 exports.isDebugEnabled = isDebugEnvEnabled;
 exports.debugLog = debugLog;
 exports.getNavigationTimeout = getNavigationTimeout;
 exports.getCommandTimeout = getCommandTimeout;
-const axios_1 = __importDefault(require("axios"));
-const openai_1 = __importDefault(require("openai"));
 const types_1 = require("./types");
+const provider_registry_1 = require("./llm-providers/provider-registry");
 const DEBUG_FLAG = 'AI_PLAYWRIGHT_DEBUG';
 function isDebugEnvEnabled() {
     const value = process.env[DEBUG_FLAG];
@@ -34,53 +30,8 @@ function parseTimeout(value, fallback) {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
-function getAuthConfig() {
-    debugLog('Selecting auth strategy...');
-    const openAiKey = process.env.OPENAI_API_KEY?.trim();
-    const timeout = parseTimeout(process.env.LLM_CALL_TIMEOUT, DEFAULT_LLM_TIMEOUT_MS);
-    if (openAiKey) {
-        debugLog(`Using OpenAI direct auth (model: ${process.env.OPENAI_MODEL?.trim() || 'gpt-5-mini'})`);
-        const openai = new openai_1.default({ apiKey: openAiKey });
-        const model = process.env.OPENAI_MODEL?.trim() || 'gpt-5-mini';
-        return {
-            kind: 'openai',
-            client: openai,
-            model,
-            timeout,
-        };
-    }
-    const apiKey = process.env.TESTCHIMP_API_KEY?.trim();
-    const projectId = process.env.TESTCHIMP_PROJECT_ID?.trim();
-    const userAuthKey = process.env.TESTCHIMP_USER_AUTH_KEY?.trim();
-    const userMail = process.env.TESTCHIMP_USER_MAIL?.trim();
-    if (apiKey && projectId) {
-        debugLog('Using TestChimp API key + project id auth');
-        return {
-            kind: 'testchimp',
-            headers: {
-                'TestChimp-Api-Key': apiKey,
-                'project-id': projectId,
-            },
-            endpoint: (process.env.TESTCHIMP_BACKEND_URL?.trim() ||
-                'https://featureservice.testchimp.io') + '/localagent/call_llm',
-            timeout,
-        };
-    }
-    if (userAuthKey && userMail) {
-        debugLog('Using TestChimp user auth key + mail');
-        return {
-            kind: 'testchimp',
-            headers: {
-                user_auth_key: userAuthKey,
-                user_mail: userMail,
-            },
-            endpoint: (process.env.TESTCHIMP_BACKEND_URL?.trim() ||
-                'https://featureservice.testchimp.io') + '/localagent/call_llm',
-            timeout,
-        };
-    }
-    debugLog('Authentication failed: no usable credentials found');
-    throw new Error('Missing authentication. Provide OPENAI_API_KEY or TestChimp credentials (TESTCHIMP_API_KEY/TESTCHIMP_PROJECT_ID or TESTCHIMP_USER_AUTH_KEY/TESTCHIMP_USER_MAIL).');
+function getLLMCallTimeout() {
+    return parseTimeout(process.env.LLM_CALL_TIMEOUT, DEFAULT_LLM_TIMEOUT_MS);
 }
 async function withRetry(action, retries = 3, delayMs = 250) {
     try {
@@ -188,54 +139,21 @@ function validateAiActionResult(payload) {
     }
     return result;
 }
-function buildUserContent(userPrompt, image, secondaryImage) {
-    const content = [{ type: 'text', text: userPrompt }];
-    if (secondaryImage) {
-        content.push({ type: 'image_url', image_url: { url: secondaryImage } });
-    }
-    if (image) {
-        content.push({ type: 'image_url', image_url: { url: image } });
-    }
-    return content;
-}
 async function callAiAction(request) {
-    const auth = getAuthConfig();
-    debugLog('Calling AI action', { systemPromptLength: request.systemPrompt.length, userPromptLength: request.userPrompt.length, hasImage: Boolean(request.image), hasSecondaryImage: Boolean(request.secondaryImage) });
+    const provider = (0, provider_registry_1.resolveActiveLLMProvider)();
+    const timeoutMs = getLLMCallTimeout();
+    debugLog('Calling AI action', {
+        provider: provider.name,
+        systemPromptLength: request.systemPrompt.length,
+        userPromptLength: request.userPrompt.length,
+        hasImage: Boolean(request.image),
+    });
     const raw = await withRetry(async () => {
-        if (auth.kind === 'openai') {
-            const response = await auth.client.chat.completions.create({
-                model: auth.model,
-                response_format: { type: 'json_object' },
-                messages: [
-                    { role: 'system', content: request.systemPrompt },
-                    {
-                        role: 'user',
-                        content: buildUserContent(request.userPrompt, request.image, request.secondaryImage),
-                    },
-                ],
-            }, { timeout: auth.timeout });
-            const content = response.choices[0]?.message?.content;
-            if (!content) {
-                throw new Error('Received empty response from OpenAI.');
-            }
-            debugLog('Received OpenAI response', { length: content.length });
-            return content;
+        const content = await provider.callLLM(request, { timeoutMs });
+        if (!content) {
+            throw new Error('LLM provider returned an empty response.');
         }
-        const { endpoint, headers, timeout } = auth;
-        const payload = {
-            system_prompt: request.systemPrompt,
-            user_prompt: request.userPrompt,
-            image_url: request.image,
-        };
-        if (request.secondaryImage) {
-            payload['secondary_image_url'] = request.secondaryImage;
-        }
-        const response = await axios_1.default.post(endpoint, payload, { headers, timeout });
-        const content = response.data?.answer;
-        if (typeof content !== 'string') {
-            throw new Error('TestChimp backend returned an unexpected response format.');
-        }
-        debugLog('Received TestChimp response', { length: content.length });
+        debugLog('Received LLM response', { provider: provider.name, length: content.length });
         return content;
     });
     let parsed;

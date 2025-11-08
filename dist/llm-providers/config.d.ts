@@ -1,0 +1,13 @@
+import { LLMProviderFactory } from './llm-provider';
+import { createOpenaiProvider } from './openai-provider';
+import { createTestchimpKeyBasedProvider } from './testchimp-key-provider';
+import { createTestchimpPatBasedProvider } from './testchimp-pat-provider';
+import { createGeminiProvider } from './gemini-provider';
+import { createClaudeProvider } from './claude-provider';
+declare const PROVIDER_CONFIG: readonly [readonly ["openai", typeof createOpenaiProvider], readonly ["testchimp-key", typeof createTestchimpKeyBasedProvider], readonly ["testchimp-pat", typeof createTestchimpPatBasedProvider], readonly ["gemini", typeof createGeminiProvider], readonly ["claude", typeof createClaudeProvider]];
+type ProviderTuple = typeof PROVIDER_CONFIG[number];
+export type ProviderName = ProviderTuple[0];
+export declare const LLM_PROVIDER_ORDER: ProviderName[];
+export declare function getConfiguredProviderFactories(): LLMProviderFactory[];
+export declare function getConfiguredProviderNames(): ProviderName[];
+export {};
