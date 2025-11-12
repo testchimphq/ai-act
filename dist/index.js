@@ -25,6 +25,40 @@ const DEFAULT_CONFIDENCE_THRESHOLD = 70;
 const DEFAULT_WAIT_RETRY_LIMIT = 2;
 const DEFAULT_OBJECTIVE_ITERATION_LIMIT = 5;
 const DEFAULT_TEST_TIMEOUT_MS = 180000;
+function safeToString(value) {
+    try {
+        return String(value);
+    }
+    catch (_a) {
+        return '[unserializable]';
+    }
+}
+function normalizeAttempt(attempt) {
+    const command = typeof attempt.command === 'string' && attempt.command.length > 0 ? attempt.command : 'unknown';
+    const error = typeof attempt.error === 'string'
+        ? attempt.error
+        : attempt.error != null
+            ? safeToString(attempt.error)
+            : undefined;
+    return error
+        ? { command, status: attempt.status, error }
+        : { command, status: attempt.status };
+}
+function formatFailedAttemptsLine(attempts) {
+    if (!attempts || attempts.length === 0) {
+        return undefined;
+    }
+    const normalized = attempts.map(normalizeAttempt);
+    try {
+        return `Attempts: ${JSON.stringify(normalized)}`;
+    }
+    catch (_a) {
+        const fallback = normalized
+            .map(({ command, status, error }) => [command, status, error].filter(Boolean).join(' | '))
+            .join('; ');
+        return `Attempts: ${fallback}`;
+    }
+}
 function getDesiredTestTimeout() {
     const raw = process.env.AI_PLAYWRIGHT_TEST_TIMEOUT_MS?.trim();
     if (!raw) {
@@ -464,7 +498,7 @@ async function act(objective, context) {
                     const failureMessage = [
                         `AI action failed during pre-commands for objective: ${objective}`,
                         result.error ? `Last error: ${result.error}` : undefined,
-                        result.failedAttempts ? `Attempts: ${JSON.stringify(result.failedAttempts)}` : undefined,
+                        formatFailedAttemptsLine(result.failedAttempts),
                     ]
                         .filter(Boolean)
                         .join('\n');
@@ -535,7 +569,7 @@ async function act(objective, context) {
             const failureMessage = [
                 `AI action failed for objective: ${objective}`,
                 lastError ? `Last error: ${lastError}` : undefined,
-                failedResult?.failedAttempts ? `Attempts: ${JSON.stringify(failedResult.failedAttempts)}` : undefined,
+                formatFailedAttemptsLine(failedResult?.failedAttempts),
             ]
                 .filter(Boolean)
                 .join('\n');
