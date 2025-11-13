@@ -391,6 +391,10 @@ class PageSoMHandler {
     async drawSomOverlay(elements) {
         await this.page.evaluate((els) => {
             const doc = document;
+            // Skip if body doesn't exist yet (page still loading)
+            if (!doc.body) {
+                return;
+            }
             // Create or get canvas
             let canvas = doc.getElementById('tc-som-canvas');
             if (!canvas) {

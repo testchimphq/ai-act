@@ -466,6 +466,11 @@ export class PageSoMHandler {
     await this.page.evaluate((els: SomElement[]) => {
       const doc = document;
       
+      // Skip if body doesn't exist yet (page still loading)
+      if (!doc.body) {
+        return;
+      }
+      
       // Create or get canvas
       let canvas = doc.getElementById('tc-som-canvas') as HTMLCanvasElement;
       if (!canvas) {

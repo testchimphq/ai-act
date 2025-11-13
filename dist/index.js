@@ -29,20 +29,20 @@ function safeToString(value) {
     try {
         return String(value);
     }
-    catch (_a) {
+    catch {
         return '[unserializable]';
     }
 }
 function normalizeAttempt(attempt) {
-    const command = typeof attempt.command === 'string' && attempt.command.length > 0 ? attempt.command : 'unknown';
+    const command = typeof attempt.command === 'string' && attempt.command.length > 0
+        ? attempt.command
+        : 'unknown';
     const error = typeof attempt.error === 'string'
         ? attempt.error
         : attempt.error != null
             ? safeToString(attempt.error)
             : undefined;
-    return error
-        ? { command, status: attempt.status, error }
-        : { command, status: attempt.status };
+    return error ? { command, status: attempt.status, error } : { command, status: attempt.status };
 }
 function formatFailedAttemptsLine(attempts) {
     if (!attempts || attempts.length === 0) {
@@ -52,7 +52,7 @@ function formatFailedAttemptsLine(attempts) {
     try {
         return `Attempts: ${JSON.stringify(normalized)}`;
     }
-    catch (_a) {
+    catch {
         const fallback = normalized
             .map(({ command, status, error }) => [command, status, error].filter(Boolean).join(' | '))
             .join('; ');
