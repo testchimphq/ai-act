@@ -100,6 +100,7 @@ export interface SomElement {
   tag: string;
   role: string;
   text: string;
+  textTruncated?: boolean;  // Track if text was truncated (original length > 50 chars)
   ariaLabel: string;
   labelText: string;  // Text from associated <label> element (for getByLabel)
   placeholder: string;
@@ -125,6 +126,7 @@ export interface TypedSelector {
   type: 'id' | 'testId' | 'label' | 'role' | 'placeholder' | 'text' | 'title' | 'altText' | 'name' | 'locator';
   value: string;
   roleOptions?: { name?: string };  // For getByRole
+  exact?: boolean;  // For text selectors: use exact matching (only if text wasn't truncated)
   parent?: TypedSelector;  // For chaining: page.locator(parent).locator(this)
   nth?: number;            // Optional index disambiguation when multiple nodes match
 }

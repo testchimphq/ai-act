@@ -75,6 +75,7 @@ export interface SomElement {
     tag: string;
     role: string;
     text: string;
+    textTruncated?: boolean;
     ariaLabel: string;
     labelText: string;
     placeholder: string;
@@ -106,6 +107,7 @@ export interface TypedSelector {
     roleOptions?: {
         name?: string;
     };
+    exact?: boolean;
     parent?: TypedSelector;
     nth?: number;
 }

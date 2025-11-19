@@ -239,6 +239,52 @@ class PageSoMHandler {
                     topLevelInteractive.add(el);
                 }
             });
+            /**
+             * Map HTML tag name to valid Playwright role
+             * Handles cases where tag name doesn't match ARIA role (e.g., 'a' → 'link')
+             * Based on W3C ARIA specifications and Playwright's supported roles
+             * This function runs in browser context (inside page.evaluate)
+             */
+            function mapTagToPlaywrightRole(tag, elementType) {
+                // Special case: input elements need type-based mapping
+                if (tag === 'input') {
+                    if (elementType === 'checkbox')
+                        return 'checkbox';
+                    if (elementType === 'radio')
+                        return 'radio';
+                    if (elementType === 'submit')
+                        return 'button';
+                    if (elementType === 'button')
+                        return 'button';
+                    // All other input types (text, password, email, search, etc.) → 'textbox'
+                    return 'textbox';
+                }
+                // Map other HTML tag names to valid Playwright roles
+                const tagToRoleMap = {
+                    'a': 'link',
+                    'button': 'button',
+                    'textarea': 'textbox',
+                    'select': 'combobox',
+                    'option': 'option',
+                    'img': 'img',
+                    'h1': 'heading',
+                    'h2': 'heading',
+                    'h3': 'heading',
+                    'h4': 'heading',
+                    'h5': 'heading',
+                    'h6': 'heading',
+                    'article': 'article',
+                    'aside': 'complementary',
+                    'main': 'main',
+                    'nav': 'navigation',
+                    'form': 'form',
+                    'table': 'table',
+                    'ul': 'list',
+                    'ol': 'list',
+                    'li': 'listitem',
+                };
+                return tagToRoleMap[tag] || tag; // Fallback to tag name if not mapped
+            }
             // Filter to visible, non-occluded, enabled elements
             topLevelInteractive.forEach((el) => {
                 const rect = el.getBoundingClientRect();
@@ -314,16 +360,20 @@ class PageSoMHandler {
                 // Capture element details
                 const parent = el.parentElement;
                 // Extract text - if main element is hidden, try to get text from pseudo-elements
-                let displayText = el.textContent?.trim().substring(0, 50) || '';
+                const originalText = el.textContent?.trim() || '';
+                let displayText = originalText.substring(0, 50);
+                let isTextTruncated = originalText.length > 50;
                 if (hasVisiblePseudo && (!displayText || styles.visibility === 'hidden')) {
                     const before = window.getComputedStyle(el, '::before');
                     const after = window.getComputedStyle(el, '::after');
                     if (before.content && before.content !== 'none') {
                         // Remove surrounding quotes from content
                         displayText = before.content.replace(/^["']|["']$/g, '');
+                        isTextTruncated = false; // Pseudo-element content is not truncated
                     }
                     else if (after.content && after.content !== 'none') {
                         displayText = after.content.replace(/^["']|["']$/g, '');
+                        isTextTruncated = false; // Pseudo-element content is not truncated
                     }
                 }
                 // For images, the accessible name comes from alt attribute
@@ -359,8 +409,15 @@ class PageSoMHandler {
                 elements.push({
                     somId,
                     tag: el.tagName.toLowerCase(),
-                    role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                    role: (() => {
+                        const explicitRole = el.getAttribute('role');
+                        if (explicitRole)
+                            return explicitRole;
+                        // Use helper function to map tag name to valid Playwright role
+                        return mapTagToPlaywrightRole(el.tagName.toLowerCase(), el.type || undefined);
+                    })(),
                     text: displayText,
+                    textTruncated: isTextTruncated,
                     ariaLabel: accessibleName,
                     labelText: labelText, // Associated <label> text for getByLabel()
                     placeholder: el.placeholder || '',
@@ -1136,13 +1193,19 @@ class PageSoMHandler {
         // Priority 8: getByText (last semantic option)
         // Skip for pseudo-element buttons (getByText will match the heading instead!)
         if (!element.hasVisiblePseudoElement && element.text) {
-            selectors.push({ type: 'text', value: element.text });
+            selectors.push({
+                type: 'text',
+                value: element.text,
+                exact: !element.textTruncated // Use exact only if text wasn't truncated
+            });
         }
         // Priority 9: Parent-scoped locator (generic fallback)
         if (element.parent?.className) {
             const parentClass = element.parent.className.split(' ')[0];
             if (parentClass) {
-                selectors.push({ type: 'locator', value: `.${parentClass} ${element.tag}` });
+                // Escape special characters in CSS class names
+                const escapedClass = parentClass.replace(/([^a-zA-Z0-9_-])/g, '\\$1');
+                selectors.push({ type: 'locator', value: `.${escapedClass} ${element.tag}` });
             }
         }
         return selectors;
@@ -1274,6 +1337,62 @@ class PageSoMHandler {
         };
     }
     /**
+     * Map HTML tag name or role string to valid Playwright role
+     * Handles cases where tag name doesn't match ARIA role (e.g., 'a' → 'link')
+     * Based on W3C ARIA specifications and Playwright's supported roles
+     */
+    mapToPlaywrightRole(roleOrTag, elementType) {
+        // Map HTML tag names to valid Playwright roles (per W3C ARIA specifications)
+        // This handles cases where tag names don't match ARIA role names
+        // Special case: input elements need type-based mapping
+        if (roleOrTag === 'input') {
+            if (elementType === 'checkbox')
+                return 'checkbox';
+            if (elementType === 'radio')
+                return 'radio';
+            if (elementType === 'submit')
+                return 'button';
+            if (elementType === 'button')
+                return 'button';
+            // All other input types (text, password, email, search, etc.) → 'textbox'
+            return 'textbox';
+        }
+        // Map other HTML tag names to valid Playwright roles
+        const tagToRoleMap = {
+            'a': 'link', // <a> with href → 'link' role
+            'button': 'button', // <button> → 'button' role
+            'textarea': 'textbox', // <textarea> → 'textbox' role
+            'select': 'combobox', // <select> → 'combobox' role
+            'option': 'option', // <option> → 'option' role
+            'img': 'img', // <img> → 'img' role
+            'h1': 'heading', // <h1> → 'heading' role
+            'h2': 'heading', // <h2> → 'heading' role
+            'h3': 'heading', // <h3> → 'heading' role
+            'h4': 'heading', // <h4> → 'heading' role
+            'h5': 'heading', // <h5> → 'heading' role
+            'h6': 'heading', // <h6> → 'heading' role
+            'article': 'article', // <article> → 'article' role
+            'aside': 'complementary', // <aside> → 'complementary' role
+            'main': 'main', // <main> → 'main' role
+            'nav': 'navigation', // <nav> → 'navigation' role
+            'form': 'form', // <form> → 'form' role
+            'table': 'table', // <table> → 'table' role
+            'ul': 'list', // <ul> → 'list' role
+            'ol': 'list', // <ol> → 'list' role
+            'li': 'listitem', // <li> → 'listitem' role
+        };
+        // Check if it's a known HTML tag that needs mapping
+        if (tagToRoleMap[roleOrTag]) {
+            return tagToRoleMap[roleOrTag];
+        }
+        // If not a tag needing mapping, assume it's already a valid ARIA role
+        // Playwright supports all ARIA roles per W3C specifications
+        // Common ones: alert, button, checkbox, combobox, dialog, heading, link,
+        // list, listitem, menu, menuitem, option, progressbar, radio, searchbox,
+        // slider, spinbutton, status, switch, tab, tabpanel, textbox, tooltip, tree, etc.
+        return roleOrTag;
+    }
+    /**
      * Build Playwright locator from typed selector (supports chaining)
      */
     buildLocatorFromTypedSelector(typedSelector) {
@@ -1294,13 +1413,15 @@ class PageSoMHandler {
                 locator = base.getByLabel(typedSelector.value);
                 break;
             case 'role':
-                locator = base.getByRole(typedSelector.value, typedSelector.roleOptions);
+                // Map HTML tag names to valid Playwright roles
+                const mappedRole = this.mapToPlaywrightRole(typedSelector.value);
+                locator = base.getByRole(mappedRole, typedSelector.roleOptions);
                 break;
             case 'placeholder':
                 locator = base.getByPlaceholder(typedSelector.value);
                 break;
             case 'text':
-                locator = base.getByText(typedSelector.value);
+                locator = base.getByText(typedSelector.value, typedSelector.exact ? { exact: true } : undefined);
                 break;
             case 'title':
                 locator = base.getByTitle(typedSelector.value);

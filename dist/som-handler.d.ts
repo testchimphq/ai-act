@@ -69,6 +69,12 @@ export declare class PageSoMHandler {
      */
     private applyHeuristicsAndRetry;
     /**
+     * Map HTML tag name or role string to valid Playwright role
+     * Handles cases where tag name doesn't match ARIA role (e.g., 'a' → 'link')
+     * Based on W3C ARIA specifications and Playwright's supported roles
+     */
+    private mapToPlaywrightRole;
+    /**
      * Build Playwright locator from typed selector (supports chaining)
      */
     private buildLocatorFromTypedSelector;
